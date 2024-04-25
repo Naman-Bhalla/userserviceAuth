@@ -1,10 +1,13 @@
 package com.auth1.auth.learning.service;
 
+import com.auth1.auth.learning.dtos.SendEmailMessageDto;
 import com.auth1.auth.learning.model.Token;
 import com.auth1.auth.learning.model.User;
 import com.auth1.auth.learning.repository.TokenRepository;
 import com.auth1.auth.learning.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +18,8 @@ import java.util.UUID;
 
 @Service
 public class UserService {
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     @Autowired
     private UserRepository userRepository;
@@ -25,6 +30,9 @@ public class UserService {
     @Autowired
     private BCryptPasswordEncoder bCryptPasswordEncoder;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
 
     public User signUp(String email, String password, String name){
 
@@ -32,7 +40,24 @@ public class UserService {
         user.setEmail(email);
         user.setName(name);
         user.setPassword(bCryptPasswordEncoder.encode(password));
-        return userRepository.save(user);
+
+        User savedUser = userRepository.save(user);
+
+        SendEmailMessageDto message = new SendEmailMessageDto();
+        message.setFrom("support@scaler.com");
+        message.setTo(email);
+        message.setSubject("Welcome to Scaler!");
+        message.setBody("Hey! Looking forward to have you on our platform.");
+
+        try {
+            kafkaTemplate.send(
+                    "sendEmail",
+                    objectMapper.writeValueAsString(message)
+            );
+        } catch (Exception e) {}
+
+
+        return savedUser;
     }
 
     public Token login(String email, String password) {
